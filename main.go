@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"html/template"
 	"log"
@@ -71,28 +72,36 @@ const nAddresses = 20
 
 // getAddress returns an address generated from a seed at the index specified
 // by `index`.
-func getAddress(seed modules.Seed, index uint64) types.UnlockHash {
+func getAddress(seed modules.Seed, index uint64, height uint64) types.UnlockHash {
 	_, pk := crypto.GenerateKeyPairDeterministic(crypto.HashAll(seed, index))
-	return types.UnlockConditions{
-		PublicKeys:         []types.SiaPublicKey{types.Ed25519PublicKey(pk)},
-		SignaturesRequired: 1,
-	}.UnlockHash()
+	var uc types.UnlockConditions
+	if height != 0 {
+		uc = types.UnlockConditions{
+			PublicKeys:         []types.SiaPublicKey{types.Ed25519PublicKey(pk)},
+			SignaturesRequired: 1,
+			Timelock:	    types.BlockHeight(height),
+		}
+	} else {
+		uc = types.UnlockConditions{
+			PublicKeys:         []types.SiaPublicKey{types.Ed25519PublicKey(pk)},
+			SignaturesRequired: 1,
+		}
+	}
+	return uc.UnlockHash()
 }
 
 func main() {
+	timelock := flag.Int("timelock", 0, "timelock block height for the addresses")
+	flag.Parse()
+
 	var seed modules.Seed
-	var seedStr string
 
 	// get a seed
 	var seedErr error
-	if len(os.Args) > 1 {
-		// non-zero arguments: read seed words
-		var words []string
-		if len(os.Args[1:]) == 1 {
-			words = strings.Fields(os.Args[1])
-		} else {
-			words = os.Args[1:]
-		}
+	var seedStr string
+	var words []string
+	words = flag.Args()
+	if len(words) > 0 {
 		if len(words) != 29 {
 			log.Fatal("29 seed words required")
 		}
@@ -110,7 +119,7 @@ func main() {
 	// generate a few addresses from that seed
 	var addresses []types.UnlockHash
 	for i := uint64(0); i < nAddresses; i++ {
-		addresses = append(addresses, getAddress(seed, i))
+		addresses = append(addresses, getAddress(seed, i, uint64(*timelock)))
 	}
 
 	templateData := struct {

@@ -72,7 +72,7 @@ const nAddresses = 20
 
 // getAddress returns an address generated from a seed at the index specified
 // by `index`.
-func getAddress(seed modules.Seed, index, height, n, m uint64) types.UnlockHash {
+func getAddress(seed modules.Seed, index, height, n, m uint64) (types.UnlockHash, []types.SiaPublicKey) {
 	var pks []types.SiaPublicKey
 	for i := 0; i < int(m); i ++ {
 		_, pk := crypto.GenerateKeyPairDeterministic(crypto.HashAll(seed, index))
@@ -91,13 +91,14 @@ func getAddress(seed modules.Seed, index, height, n, m uint64) types.UnlockHash 
 			SignaturesRequired: n,
 		}
 	}
-	return uc.UnlockHash()
+	return uc.UnlockHash(), pks
 }
 
 func main() {
 	timelock := flag.Int("timelock", 0, "timelock block height for the addresses")
 	n := flag.Int("n", 1, "signatures required")
 	m := flag.Int("m", 1, "keys for each address")
+	printPtr := flag.Bool("print", false, "print pubkeys to cli")
 	flag.Parse()
 
 	if *n > *m {
@@ -129,8 +130,19 @@ func main() {
 
 	// generate a few addresses from that seed
 	var addresses []types.UnlockHash
+	if *printPtr {
+		fmt.Println("Pubkeys")
+	}
 	for i := uint64(0); i < nAddresses; i++ {
-		addresses = append(addresses, getAddress(seed, i, uint64(*timelock), uint64(*n), uint64(*m)))
+		addr, pubkeys := getAddress(seed, i, uint64(*timelock), uint64(*n), uint64(*m))
+		var keystrs []string
+		for _, pubkey := range(pubkeys) {
+			keystrs = append(keystrs, pubkey.String())
+		}
+		addresses = append(addresses, addr)
+		if *printPtr {
+			fmt.Printf("%d: %s\n", i, strings.Join(keystrs, ","))
+		}
 	}
 
 	templateData := struct {

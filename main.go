@@ -72,19 +72,23 @@ const nAddresses = 20
 
 // getAddress returns an address generated from a seed at the index specified
 // by `index`.
-func getAddress(seed modules.Seed, index uint64, height uint64) types.UnlockHash {
-	_, pk := crypto.GenerateKeyPairDeterministic(crypto.HashAll(seed, index))
+func getAddress(seed modules.Seed, index, height, n, m uint64) types.UnlockHash {
+	var pks []types.SiaPublicKey
+	for i := 0; i < int(m); i ++ {
+		_, pk := crypto.GenerateKeyPairDeterministic(crypto.HashAll(seed, index))
+		pks = append(pks, types.Ed25519PublicKey(pk))
+	}
 	var uc types.UnlockConditions
 	if height != 0 {
 		uc = types.UnlockConditions{
-			PublicKeys:         []types.SiaPublicKey{types.Ed25519PublicKey(pk)},
-			SignaturesRequired: 1,
+			PublicKeys:         pks,
+			SignaturesRequired: n,
 			Timelock:	    types.BlockHeight(height),
 		}
 	} else {
 		uc = types.UnlockConditions{
-			PublicKeys:         []types.SiaPublicKey{types.Ed25519PublicKey(pk)},
-			SignaturesRequired: 1,
+			PublicKeys:         pks,
+			SignaturesRequired: n,
 		}
 	}
 	return uc.UnlockHash()
@@ -92,7 +96,14 @@ func getAddress(seed modules.Seed, index uint64, height uint64) types.UnlockHash
 
 func main() {
 	timelock := flag.Int("timelock", 0, "timelock block height for the addresses")
+	n := flag.Int("n", 1, "signatures required")
+	m := flag.Int("m", 1, "keys for each address")
 	flag.Parse()
+
+	if *n > *m {
+		log.Fatal("Cannot create an address that requires more signatures than there are keys associated with it")
+		return
+	}
 
 	var seed modules.Seed
 
@@ -119,7 +130,7 @@ func main() {
 	// generate a few addresses from that seed
 	var addresses []types.UnlockHash
 	for i := uint64(0); i < nAddresses; i++ {
-		addresses = append(addresses, getAddress(seed, i, uint64(*timelock)))
+		addresses = append(addresses, getAddress(seed, i, uint64(*timelock), uint64(*n), uint64(*m)))
 	}
 
 	templateData := struct {

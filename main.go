@@ -12,16 +12,16 @@ import (
 
 	"github.com/skratchdot/open-golang/open"
 
-	"github.com/NebulousLabs/Sia/crypto"
-	"github.com/NebulousLabs/Sia/modules"
-	"github.com/NebulousLabs/Sia/types"
-	"github.com/NebulousLabs/fastrand"
+	"github.com/HyperspaceApp/Hyperspace/crypto"
+	"github.com/HyperspaceApp/Hyperspace/modules"
+	"github.com/HyperspaceApp/Hyperspace/types"
+	"github.com/HyperspaceApp/fastrand"
 )
 
 const outputTmpl = `
 <html>
 	<head>
-		<title> Sia Cold Storage Wallet </title>
+		<title> Hyperspace Cold Storage Wallet </title>
 	</head>
 	<style>
 		body {
@@ -36,13 +36,15 @@ const outputTmpl = `
 		}
 	</style>
 	<body>
-		<h2 align="center">Sia Cold Storage Wallet</h3>
+		<h2 align="center">Hyperspace Cold Storage Wallet</h3>
 		<section class="warning">
-			<p> Please write down your seed. Take care not to expose your seed to any potentially insecure device, such as a traditional computer printer. Anyone can use the Seed to recover any Siacoin sent to any of the addresses, without an online or synced wallet. Make sure to keep the seed safe, and secret.</p>
+			<p> Please write down your seed. Take care not to expose your seed to any potentially insecure device, such as a traditional computer printer. Anyone can use the Seed to recover any Space Cash sent to any of the addresses, without an online or synced wallet. Make sure to keep the seed safe, and secret.</p>
 		</section>
 		<section class="seed">
-			<h4>Seed</h4>
-			<p><font size="+1">{{.Seed}}</font></p>
+			<h4>Seeds</h4>
+			{{ range .Seeds }}
+				<p><font size="+1">{{.}}</font></p>
+			{{ end }}
 		</section>
 		<section class="addresses">
 			<h4>Addresses</h4>
@@ -68,15 +70,21 @@ const outputTmpl = `
 </html>
 `
 
-const nAddresses = 20
+const nAddresses = 5
+const wordsPerSeed = 29
 
 // getAddress returns an address generated from a seed at the index specified
 // by `index`.
-func getAddress(seed modules.Seed, index, height, n, m uint64) (types.UnlockHash, []types.SiaPublicKey) {
+func getAddress(seeds []modules.Seed, index, height, n, m uint64) (types.UnlockHash, []types.SiaPublicKey) {
 	var pks []types.SiaPublicKey
 	for i := 0; i < int(m); i ++ {
-		_, pk := crypto.GenerateKeyPairDeterministic(crypto.HashAll(seed, index))
-		pks = append(pks, types.Ed25519PublicKey(pk))
+		if len(seeds) == 1 {
+			_, pk := crypto.GenerateKeyPairDeterministic(crypto.HashAll(seeds[0], index))
+			pks = append(pks, types.Ed25519PublicKey(pk))
+		} else {
+			_, pk := crypto.GenerateKeyPairDeterministic(crypto.HashAll(seeds[i], index))
+			pks = append(pks, types.Ed25519PublicKey(pk))
+		}
 	}
 	var uc types.UnlockConditions
 	if height != 0 {
@@ -98,6 +106,7 @@ func main() {
 	timelock := flag.Int("timelock", 0, "timelock block height for the addresses")
 	n := flag.Int("n", 1, "signatures required")
 	m := flag.Int("m", 1, "keys for each address")
+	uniqueSeedsPtr := flag.Bool("unique-seeds", false, "use a different seed for each signature")
 	printPtr := flag.Bool("print", false, "print pubkeys to cli")
 	flag.Parse()
 
@@ -106,50 +115,73 @@ func main() {
 		return
 	}
 
-	var seed modules.Seed
+	var seeds []modules.Seed
 
 	// get a seed
-	var seedErr error
-	var seedStr string
+	var seedStrs []string
 	var words []string
+	seedWords := wordsPerSeed
+	if *uniqueSeedsPtr {
+		seedWords *= *n
+	}
 	words = flag.Args()
 	if len(words) > 0 {
-		if len(words) != 29 {
-			log.Fatal("29 seed words required")
+		if len(words) != seedWords {
+			log.Fatalf("%v seed words required", seedWords)
 		}
-		seedStr = strings.Join(words[:], " ")
-		seed, seedErr = modules.StringToSeed(seedStr, "english")
+		for i := 0; i < *n; i++ {
+			curWords := words[i*wordsPerSeed:(i+1)*wordsPerSeed]
+			seedStr := strings.Join(curWords[:], " ")
+			seed, seedErr := modules.StringToSeed(seedStr, "english")
+			if seedErr != nil {
+				log.Fatal(seedErr)
+			}
+			seeds = append(seeds, seed)
+			seedStrs = append(seedStrs, seedStr)
+		}
 	} else {
-		// zero arguments: generate a seed
-		fastrand.Read(seed[:])
-		seedStr, seedErr = modules.SeedToString(seed, "english")
-	}
-	if seedErr != nil {
-		log.Fatal(seedErr)
+		for i := 0; i < *m; i++ {
+			var seed modules.Seed
+			// zero arguments: generate a seed
+			fastrand.Read(seed[:])
+			seedStr, seedErr := modules.SeedToString(seed, "english")
+			if seedErr != nil {
+				log.Fatal(seedErr)
+			}
+			seeds = append(seeds, seed)
+			seedStrs = append(seedStrs, seedStr)
+		}
 	}
 
 	// generate a few addresses from that seed
 	var addresses []types.UnlockHash
 	if *printPtr {
-		fmt.Println("Pubkeys")
+		for i := 0; i < *m; i++ {
+			fmt.Println()
+			fmt.Println("Seed:")
+			fmt.Println()
+			fmt.Println(seedStrs[i])
+			fmt.Println()
+		}
 	}
 	for i := uint64(0); i < nAddresses; i++ {
-		addr, pubkeys := getAddress(seed, i, uint64(*timelock), uint64(*n), uint64(*m))
+		addr, pubkeys := getAddress(seeds, i, uint64(*timelock), uint64(*n), uint64(*m))
 		var keystrs []string
 		for _, pubkey := range(pubkeys) {
 			keystrs = append(keystrs, pubkey.String())
 		}
 		addresses = append(addresses, addr)
 		if *printPtr {
-			fmt.Printf("%d: %s\n", i, strings.Join(keystrs, ","))
+			fmt.Printf("address %d: %s\n", i, addr)
+			fmt.Printf("pubkey %d: %s\n", i, strings.Join(keystrs, ","))
 		}
 	}
 
 	templateData := struct {
-		Seed      string
+		Seeds     []string
 		Addresses []types.UnlockHash
 	}{
-		Seed:      seedStr,
+		Seeds:     seedStrs,
 		Addresses: addresses,
 	}
 	t, err := template.New("output").Parse(outputTmpl)
@@ -173,7 +205,9 @@ func main() {
 	if err != nil {
 		// fallback to console, clean up the server and exit
 		l.Close()
-		fmt.Println("Seed:", seedStr)
+		for _, seedStr := range seedStrs {
+			fmt.Println("Seed:", seedStr)
+		}
 		fmt.Println("Addresses:")
 		for _, address := range addresses {
 			fmt.Println(address)

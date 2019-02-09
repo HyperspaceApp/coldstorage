@@ -4,12 +4,32 @@ sia-coldstorage is a utility that generates a seed and a collection of addresses
 
 ## USAGE
 
-Download the latest
-[release](https://github.com/avahowell/sia-coldstorage/releases) for your
-platform, then double click the `sia-coldstorage` binary. This will generate
-your seed and addresses, opening up a page in your web browser to display them.
+The most basic usage generates a set of non-timelocked addresses requiring a single signature each. The addresses are all generated from one seed.
+
+```
+./coldstorage
+```
+
+Here is an example of generating a set of 3-of-5 multisig addresses timelocked to block 157680, with each address using pubkeys from 5 different seeds. The `-print` flag tells the command to print the pubkey info to the console, in addition to opening the web browser page with the address and seed info.
+
+```
+./coldstorage -timelock 157680 -n 3 -m 5 -print
+```
+
+If you would like to regenerate the addresses from a set of seeds, you can pass the seeds as follows:
+
+
+```
+./coldstorage -timelock 157680 -n 3 -m 5 -print -unique-seeds [seeds]
+```
+
+Please note that in the above the seeds, like the words in the seeds, should be just separated by spaces. The above command would need to be passed a list of 145 words (29 words each for 5 seeds), in the correct order, to regenerate the appropriate 5-pubkey addresses.
+
+
 Ideally, you would run this on a system that was very secure, i.e. an airgapped
 LiveCD. 
+
+
 
 
 ## LICENSE

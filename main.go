@@ -122,14 +122,14 @@ func main() {
 	var words []string
 	seedWords := wordsPerSeed
 	if *uniqueSeedsPtr {
-		seedWords *= *n
+		seedWords *= *m
 	}
 	words = flag.Args()
 	if len(words) > 0 {
 		if len(words) != seedWords {
 			log.Fatalf("%v seed words required", seedWords)
 		}
-		for i := 0; i < *n; i++ {
+		for i := 0; i < *m; i++ {
 			curWords := words[i*wordsPerSeed:(i+1)*wordsPerSeed]
 			seedStr := strings.Join(curWords[:], " ")
 			seed, seedErr := modules.StringToSeed(seedStr, "english")
